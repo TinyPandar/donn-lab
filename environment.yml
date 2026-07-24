@@ -1,0 +1,19 @@
+name: donn-lab
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pytorch
+  - pytorch-cuda=12.4
+  - numpy
+  - pyyaml
+  - matplotlib
+  - opencv
+  - tqdm
+  - tensorboard
+  - pip
+  - pip:
+      - clearml
+

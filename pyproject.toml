@@ -1,0 +1,18 @@
+[project]
+name = "donn-lab"
+version = "0.1.0"
+description = "Lab-side measured transmission-matrix DONN workflow"
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+include = [
+  "config*",
+  "core*",
+  "data*",
+  "donn_lab*",
+  "engine*",
+  "models*",
+  "pipelines*",
+  "registry*",
+]
+

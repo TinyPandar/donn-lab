@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environments
+.env
+.env.*
+.venv/
+venv/
+env/
+
+# Editors and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Large experiment data and outputs
+datasets/
+logs/
+runs/
+reports/
+visualResult/
+archived_runs/
+archieved_runs/
+outputs/
+
+# Binary matrices, checkpoints, and generated media
+*.npy
+*.npz
+*.dat
+*.bin
+*.raw
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.hdf5
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.mp4
+*.avi
+*.pdf
+
+# Keep docs tracked even though reports are ignored.
+!docs/
+!docs/**/*.md

@@ -1,0 +1,70 @@
+pipeline: base
+dataset: vehicle
+model: measured_tm_scatter
+data_root: /home/limingfei/speckle/donn/datasets/dataset_dark_intersection_32k_spread_background_road/random
+
+data:
+  dataset: vehicle
+  data_root: /home/limingfei/speckle/donn/datasets/dataset_dark_intersection_32k_spread_background_road/random
+  multiple_objects: false
+  batch_size: 32
+  max_train_batches: 0
+  max_test_batches: 0
+  h_in: 128
+  w_in: 128
+  h_out: 128
+  w_out: 128
+  input_mode: gray
+  enable_aug: false
+  vehicle_target_mode: center
+
+model_cfg:
+  name: measured_tm_scatter
+  num_layers: 5
+  seed: 42
+  activation: abs
+  normalize_input: true
+  sqrt_amplitude: true
+  phase_init: uniform
+
+  # Replace this with a measured H0/H1 path.
+  # Expected matrix layout is [N_out, N_in], complex64 by default.
+  tmatrix_path: /path/to/H0.npy
+  tmatrix_shape:
+  tmatrix_dtype: complex64
+  tmatrix_layout: out_in
+  tmatrix_normalization: none
+
+  # Leave these as 0 for future 128x128 input-mode TM.
+  # Use 24 and 32 for the current coarse DMD mode from combined_app_v4.py.
+  tmatrix_input_h: 0
+  tmatrix_input_w: 0
+
+optim:
+  lr: 0.001
+  epochs: 300
+  save_every: 50
+
+runtime:
+  device: cuda:0
+  amp: false
+  amp_dtype: bf16
+
+logging:
+  log_dir: logs
+  ckpt_dir: logs
+  comment: vehicle-dark-intersection-measured-tm-scatter
+
+loss:
+  name: pbr
+
+clearml:
+  enabled: false
+  project_name: donn
+  tags:
+    - donn
+    - measured-tm
+    - vehicle
+
+output:
+  run_name: vehicle-dark-intersection-measured-tm-scatter
