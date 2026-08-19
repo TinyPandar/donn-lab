@@ -9,8 +9,11 @@ old logs, checkpoints, datasets, or visual outputs.
 - `donn_lab/tm/io.py`: read measured matrices from `.npy`, `.npz`, or raw memmap files.
 - `donn_lab/tm/drift.py`: compare H0/H1 and estimate column phase drift.
 - `donn_lab/tm/checkpoint_phase.py`: apply a column phase correction to saved phase masks.
-- `donn_lab/hardware/interfaces.py`: small camera/projector protocols for future SDK integration.
+- `donn_lab/hardware/interfaces.py`: small camera/projector protocols.
 - `donn_lab/hardware/mock_devices.py`: local mock devices for testing workflow code without hardware.
+- `donn_lab/hardware/torch_tm_backend.py`: batched measured-TM optical simulator.
+- `donn_lab/hardware/v4_128_backend.py`: guarded JUOPT/Spinnaker 128-grid adapter.
+- `donn_lab/experiment/optical_inference.py`: model-faithful multi-pass camera feedback.
 - `donn_lab/workflows/closed_loop.py`: command builder for the stage-0 closed loop.
 
 The older training stack still provides datasets, losses, pipelines, logging,
@@ -87,4 +90,22 @@ Keep these as external paths, not git content:
 - checkpoints
 - tensorboard logs
 - generated figures and reports
+
+## Five-pass physical inference
+
+The trained five-layer measured-TM network is implemented with five time-multiplexed
+passes through the same DMD/scattering-medium/camera path. Start with the inert
+hardware preflight:
+
+```powershell
+C:\Users\smart\miniconda3\envs\py38\python.exe `
+  scripts\run_optical_vehicle_experiment.py --mode hardware --preflight-only
+```
+
+The ideal TM simulator and the deliberately armed hardware command are documented in
+[`docs/optical_vehicle_experiment.md`](../docs/optical_vehicle_experiment.md).
+
+After remeasuring `tm.npy`, use `scripts/train_and_test_optical_vehicle.py` to
+chain fresh training, a simulation accuracy gate, hardware preflight, and an
+optional explicitly armed one-sample physical test.
 

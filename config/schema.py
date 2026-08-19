@@ -44,7 +44,9 @@ class ModelConfig:
     activation_params: str | dict[str, Any] | None = None
     phase_dropout: float = 0.0
     normalize_input: bool = True
+    input_amplitude_normalization: str = "minmax"
     sqrt_amplitude: bool = True
+    detector_psf_sigma: float = 0.0
     input_mode: str = "gray"
     phase_init: str = "uniform"
     tmatrix_scale: float = 1.0

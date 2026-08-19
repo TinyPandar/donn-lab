@@ -5,15 +5,20 @@ channels:
   - conda-forge
 dependencies:
   - python=3.12
-  - pytorch
+  - pytorch=2.5.1
   - pytorch-cuda=12.4
   - numpy
+  - pandas
   - pyyaml
-  - matplotlib
-  - opencv
   - tqdm
-  - tensorboard
+  - fsspec
+  - sympy=1.13.1
   - pip
   - pip:
+      # Wheels avoid the Windows gdk-pixbuf post-link DLLs pulled in by the
+      # conda opencv/matplotlib packages. Training does not need OpenCV GUI.
+      - opencv-python-headless
+      - matplotlib
+      - tensorboard
       - clearml
 

@@ -91,7 +91,11 @@ def _build_measured_tm_scatter(cfg: ExperimentConfig, device: torch.device, dist
         activation_params=_activation_params(cfg),
         phase_dropout=float(cfg.model_cfg.phase_dropout),
         normalize_input=bool(cfg.model_cfg.normalize_input),
+        input_amplitude_normalization=str(
+            cfg.model_cfg.input_amplitude_normalization
+        ),
         sqrt_amplitude=bool(cfg.model_cfg.sqrt_amplitude),
+        detector_psf_sigma=float(cfg.model_cfg.detector_psf_sigma),
         phase_init=str(cfg.model_cfg.phase_init),
         device=device,
     ).to(device)

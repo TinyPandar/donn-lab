@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import math
 import subprocess
 import sys
@@ -103,6 +104,12 @@ def main() -> None:
         corrected = torch.load(tmp / "corr" / "epoch_1_tm_corrected.pth", map_location="cpu")["model_state_dict"]["phases.0"]
         expected = torch.remainder(phase - torch.as_tensor(column_delta.reshape(1, 1, 4, 4)), 2.0 * math.pi)
         assert float((corrected - expected).abs().max()) < 1e-5
+
+        # PyTorch keeps the NumPy mmap backing the fixed TM buffer alive. On
+        # Windows that mapping locks H0.npy, so release it before the temporary
+        # directory is removed.
+        del output, model
+        gc.collect()
 
     print("smoke_measured_tm: ok")
 

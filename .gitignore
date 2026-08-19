@@ -21,6 +21,7 @@ Thumbs.db
 
 # Large experiment data and outputs
 datasets/
+data/dataset_*/
 logs/
 runs/
 reports/

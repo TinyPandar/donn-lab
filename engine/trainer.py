@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 from dataclasses import asdict
 from typing import Any
@@ -38,6 +39,29 @@ except ImportError:
     def tqdm(iterable, *args, **kwargs):  # type: ignore[no-redef]
         _ = args, kwargs
         return iterable
+
+
+def _progress_bar(iterable, *, desc: str, total: int):
+    """Build a terminal-safe progress bar.
+
+    The linked train/test workflow captures the trainer's output through a
+    pipe.  In that situation tqdm's carriage-return refreshes are translated
+    into separate log lines by Python's Windows text stream, producing two
+    noisy lines per batch (and mojibake for the Unicode bar).  Keep dynamic
+    progress for a real terminal only; epoch summaries remain visible in
+    redirected logs.
+    """
+    interactive = bool(getattr(sys.stderr, "isatty", lambda: False)())
+    return tqdm(
+        iterable,
+        desc=desc,
+        total=total,
+        leave=False,
+        disable=not interactive,
+        mininterval=1.0,
+        dynamic_ncols=interactive,
+        ascii=(os.name == "nt"),
+    )
 
 from config.schema import ExperimentConfig
 from data import register_builtin_datasets
@@ -180,7 +204,11 @@ class TrainerEngine:
             batch_iter = self.datamodule.train_iter()
             if rank0:
                 total = self.datamodule.estimate_batches("Train")
-                pbar = tqdm(batch_iter, desc=f"Epoch {epoch}/{self.cfg.optim.epochs}", total=total, leave=False)
+                pbar = _progress_bar(
+                    batch_iter,
+                    desc=f"Epoch {epoch}/{self.cfg.optim.epochs}",
+                    total=total,
+                )
             else:
                 pbar = batch_iter
 
@@ -216,7 +244,11 @@ class TrainerEngine:
                 self.global_step += 1
 
                 if rank0 and hasattr(pbar, "set_postfix"):
-                    pbar.set_postfix(loss=f"{loss_value:.4f}", avg=f"{epoch_loss_sum / max(epoch_batch_count, 1):.4f}")
+                    pbar.set_postfix(
+                        loss=f"{loss_value:.4f}",
+                        avg=f"{epoch_loss_sum / max(epoch_batch_count, 1):.4f}",
+                        refresh=False,
+                    )
 
                 if self.cfg.data.max_train_batches > 0 and b_idx >= int(self.cfg.data.max_train_batches):
                     break
@@ -258,7 +290,11 @@ class TrainerEngine:
                 test_iter = self.datamodule.val_iter()
                 if rank0:
                     total_test = self.datamodule.estimate_batches("Test")
-                    test_pbar = tqdm(test_iter, desc=f"Testing Epoch {epoch}", total=total_test, leave=False)
+                    test_pbar = _progress_bar(
+                        test_iter,
+                        desc=f"Testing Epoch {epoch}",
+                        total=total_test,
+                    )
                 else:
                     test_pbar = test_iter
 
@@ -279,7 +315,11 @@ class TrainerEngine:
                         test_metric_counts[k] = test_metric_counts.get(k, 0) + 1
 
                     if rank0 and hasattr(test_pbar, "set_postfix"):
-                        test_pbar.set_postfix(loss=f"{vloss:.4f}", avg=f"{test_loss_sum / max(test_batch_count, 1):.4f}")
+                        test_pbar.set_postfix(
+                            loss=f"{vloss:.4f}",
+                            avg=f"{test_loss_sum / max(test_batch_count, 1):.4f}",
+                            refresh=False,
+                        )
                     if self.cfg.data.max_test_batches > 0 and tb_idx >= int(self.cfg.data.max_test_batches):
                         break
 

@@ -1,11 +1,12 @@
 pipeline: base
 dataset: vehicle
 model: measured_tm_scatter
-data_root: /home/limingfei/speckle/donn/datasets/dataset_dark_intersection_32k_spread_background_road/random
+data_root: data/dataset_dark_intersection_32k_spread_background_road/random
 
 data:
   dataset: vehicle
-  data_root: /home/limingfei/speckle/donn/datasets/dataset_dark_intersection_32k_spread_background_road/random
+  data_root: data/dataset_dark_intersection_32k_spread_background_road/random
+  label_filter: person
   multiple_objects: false
   batch_size: 32
   max_train_batches: 0
@@ -16,7 +17,16 @@ data:
   w_out: 128
   input_mode: gray
   enable_aug: false
+  zoom_crop_mode: none
+  zoom_crop_factor: 1.0
+  vis_samples: 6
+  vehicle_channel_mode: rgb
+  vehicle_channel: r
+  vehicle_channel_invert: false
+  vehicle_channel_p_low: 2.0
+  vehicle_channel_p_high: 98.0
   vehicle_target_mode: center
+  vehicle_target_column: box_mask
 
 model_cfg:
   name: measured_tm_scatter
@@ -25,22 +35,19 @@ model_cfg:
   activation: abs
   normalize_input: true
   # PNG gray values are the complex-field amplitude, not intensity.
+  # Max-only normalization preserves the deliberately non-zero dark background.
   input_amplitude_normalization: max
   sqrt_amplitude: false
-  # Effective detector-plane PSF; 0 disables the correction.
-  detector_psf_sigma: 0.0
+  # Fitted on held-out real-camera speckle pairs at 50 mW.
+  detector_psf_sigma: 0.6
   phase_init: uniform
-
-  # Replace this with a measured H0/H1 path.
-  # Expected matrix layout is [N_out, N_in], complex64 by default.
-  tmatrix_path: /path/to/H0.npy
-  tmatrix_shape:
+  tmatrix_scale: 1.0
+  tmatrix_path: tm.npy
   tmatrix_dtype: complex64
   tmatrix_layout: out_in
   tmatrix_normalization: none
-
-  # Leave these as 0 for future 128x128 input-mode TM.
-  # Use 24 and 32 for the current coarse DMD mode from combined_app_v4.py.
+  tmatrix_compute_dtype: fp32
+  return_intensity: true
   tmatrix_input_h: 0
   tmatrix_input_w: 0
 
@@ -55,8 +62,8 @@ runtime:
   amp_dtype: bf16
 
 logging:
-  log_dir: logs
-  ckpt_dir: logs
+  log_dir: runs/logs
+  ckpt_dir: runs/checkpoints
   comment: vehicle-dark-intersection-measured-tm-scatter
 
 loss:
@@ -64,11 +71,6 @@ loss:
 
 clearml:
   enabled: false
-  project_name: donn
-  tags:
-    - donn
-    - measured-tm
-    - vehicle
 
 output:
   run_name: vehicle-dark-intersection-measured-tm-scatter

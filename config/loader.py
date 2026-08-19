@@ -116,7 +116,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--normalize_negative", action="store_true", default=None)
     parser.add_argument("--return_intensity", action="store_true", default=None)
     parser.add_argument("--normalize_input", action="store_true", default=None)
+    parser.add_argument("--input_amplitude_normalization", type=str, default=None)
     parser.add_argument("--sqrt_amplitude", action="store_true", default=None)
+    parser.add_argument("--detector_psf_sigma", type=float, default=None)
     parser.add_argument("--input_mode", type=str, default=None)
     parser.add_argument("--phase_init", type=str, default=None)
     parser.add_argument("--tmatrix_scale", type=float, default=None)
@@ -269,7 +271,9 @@ def _apply_flat_overrides(cfg: ExperimentConfig, flat: dict[str, Any]) -> list[s
         "activation_params": ("model_cfg", "activation_params"),
         "phase_dropout": ("model_cfg", "phase_dropout"),
         "normalize_input": ("model_cfg", "normalize_input"),
+        "input_amplitude_normalization": ("model_cfg", "input_amplitude_normalization"),
         "sqrt_amplitude": ("model_cfg", "sqrt_amplitude"),
+        "detector_psf_sigma": ("model_cfg", "detector_psf_sigma"),
         "phase_init": ("model_cfg", "phase_init"),
         "tmatrix_scale": ("model_cfg", "tmatrix_scale"),
         "tmatrix_path": ("model_cfg", "tmatrix_path"),

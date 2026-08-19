@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from donn_lab.tm.io import ShapeLike, load_tmatrix_torch
+from donn_lab.optics.detector_psf import GaussianIntensityPSF
 
 
 class FixedMeasuredTMLayer(nn.Module):
@@ -76,7 +77,9 @@ class MeasuredTMScatterNetwork(nn.Module):
         tmatrix_normalization: str = "none",
         input_modes_hw: Optional[Tuple[int, int]] = None,
         normalize_input: bool = True,
+        input_amplitude_normalization: str = "minmax",
         sqrt_amplitude: bool = True,
+        detector_psf_sigma: float = 0.0,
         phase_init: str = "uniform",
         num_layers: int = 1,
         seed: Optional[int] = None,
@@ -97,7 +100,16 @@ class MeasuredTMScatterNetwork(nn.Module):
         self.output_height, self.output_width = int(output_hw[0]), int(output_hw[1])
         self.output_dim = self.output_height * self.output_width
         self.normalize_input = bool(normalize_input)
+        self.input_amplitude_normalization = str(
+            input_amplitude_normalization or "minmax"
+        ).lower()
+        if self.input_amplitude_normalization not in {"minmax", "max"}:
+            raise ValueError(
+                "input_amplitude_normalization must be one of {'minmax','max'}"
+            )
         self.sqrt_amplitude = bool(sqrt_amplitude)
+        self.detector_psf = GaussianIntensityPSF(detector_psf_sigma)
+        self.detector_psf_sigma = float(self.detector_psf.sigma)
         self.eps = 1e-8
 
         if not isinstance(num_layers, int) or num_layers <= 0:
@@ -170,9 +182,15 @@ class MeasuredTMScatterNetwork(nn.Module):
             phases.append(nn.Parameter(phase_l))
         self.phases = nn.ParameterList(phases)
 
-    def _normalize_spatial_per_sample(self, amplitude: torch.Tensor) -> torch.Tensor:
-        amin = amplitude.amin(dim=(2, 3), keepdim=True)
+    def _normalize_spatial_per_sample(
+        self,
+        amplitude: torch.Tensor,
+        mode: str = "minmax",
+    ) -> torch.Tensor:
         amax = amplitude.amax(dim=(2, 3), keepdim=True)
+        if mode == "max":
+            return amplitude / (amax + self.eps)
+        amin = amplitude.amin(dim=(2, 3), keepdim=True)
         return (amplitude - amin) / (amax - amin + self.eps)
 
     def _image_to_amplitude(self, x: torch.Tensor) -> torch.Tensor:
@@ -194,7 +212,10 @@ class MeasuredTMScatterNetwork(nn.Module):
             amplitude = x.mean(dim=1, keepdim=True)
 
         if self.normalize_input:
-            amplitude = self._normalize_spatial_per_sample(amplitude)
+            amplitude = self._normalize_spatial_per_sample(
+                amplitude,
+                mode=self.input_amplitude_normalization,
+            )
         amplitude = torch.clamp(amplitude, min=0.0)
         if self.sqrt_amplitude:
             amplitude = torch.sqrt(amplitude + self.eps)
@@ -202,8 +223,7 @@ class MeasuredTMScatterNetwork(nn.Module):
             amplitude = F.interpolate(amplitude, size=(self.mode_height, self.mode_width), mode="area")
         return amplitude
 
-    def _capture_apply_activation(self, y: torch.Tensor) -> torch.Tensor:
-        intensity = torch.abs(y).square()
+    def _apply_activation_to_intensity(self, intensity: torch.Tensor) -> torch.Tensor:
         if self.activation == "abs":
             return intensity
         if self.activation == "relu":
@@ -222,6 +242,18 @@ class MeasuredTMScatterNetwork(nn.Module):
             return F.softplus(intensity, beta=beta, threshold=threshold)
         return intensity
 
+    def _capture_apply_activation(self, y: torch.Tensor) -> torch.Tensor:
+        # |a+ib|^2 == a^2+b^2.  The explicit form is mathematically identical
+        # and keeps autograd intact, while avoiding PyTorch's runtime NVRTC
+        # complex-abs kernel (which is unavailable in the deployed CUDA 12.4
+        # Windows environment when nvrtc-builtins64_124.dll is missing).
+        if torch.is_complex(y):
+            intensity = y.real.square() + y.imag.square()
+        else:
+            intensity = y.square()
+        intensity = self.detector_psf(intensity)
+        return self._apply_activation_to_intensity(intensity)
+
     def forward(
         self,
         x: torch.Tensor,
@@ -235,7 +267,19 @@ class MeasuredTMScatterNetwork(nn.Module):
         detector_field = None
         detector_intensity = None
         for layer_idx in range(self.num_layers):
-            propagation_amplitude = self._normalize_spatial_per_sample(propagation_amplitude)
+            # A PNG declared as a complex-field amplitude must retain its
+            # non-zero pedestal.  Its first pass therefore uses max-only
+            # normalization.  Camera feedback in later passes remains
+            # min-max normalized exactly as before.
+            normalization_mode = (
+                self.input_amplitude_normalization
+                if layer_idx == 0 and self.normalize_input
+                else "minmax"
+            )
+            propagation_amplitude = self._normalize_spatial_per_sample(
+                propagation_amplitude,
+                mode=normalization_mode,
+            )
 
             phase_l = self.phases[layer_idx]
             if self.phase_dropout > 0.0 and self.training:
@@ -246,7 +290,9 @@ class MeasuredTMScatterNetwork(nn.Module):
             field = torch.polar(propagation_amplitude.float(), phase_l)
             field_vec = field.reshape(batch_size, -1)
             detector_vec = self.transmission_matrix(field_vec)
-            detector_field = detector_vec.reshape(batch_size, 1, self.output_height, self.output_width)
+            detector_field = detector_vec.reshape(
+                batch_size, 1, self.output_height, self.output_width
+            )
             detector_intensity = self._capture_apply_activation(detector_field)
 
             if layer_idx < self.num_layers - 1:
