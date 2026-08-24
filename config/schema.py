@@ -33,6 +33,9 @@ class DataConfig:
     vehicle_channel_p_high: float = 98.0
     vehicle_target_mode: str = "center"
     vehicle_target_column: str = "box_mask"
+    # Preserve the historical class-to-focus-coordinate path for old configs.
+    # The classification pipeline explicitly switches this to "class".
+    mnist_target_mode: str = "coord"
 
 
 @dataclass
@@ -139,6 +142,18 @@ class LossConfig:
 
 
 @dataclass
+class ClassificationConfig:
+    num_classes: int = 10
+    grid_rows: int = 2
+    grid_cols: int = 5
+    roi_h: int = 16
+    roi_w: int = 16
+    detector_margin: int = 12
+    log_energy: bool = True
+    efficiency_weight: float = 0.0
+
+
+@dataclass
 class DistillConfig:
     teacher_model: str = "none"
     teacher_ckpt: str | None = None
@@ -168,6 +183,7 @@ class ExperimentConfig:
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     clearml: ClearMLConfig = field(default_factory=ClearMLConfig)
     loss: LossConfig = field(default_factory=LossConfig)
+    classification: ClassificationConfig = field(default_factory=ClassificationConfig)
     distill: DistillConfig = field(default_factory=DistillConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
     extras: dict[str, Any] = field(default_factory=dict)

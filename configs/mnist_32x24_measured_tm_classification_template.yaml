@@ -1,0 +1,81 @@
+pipeline: classification
+dataset: mnist
+model: measured_tm_scatter
+data_root: /data/donn/datasets/mnist
+
+data:
+  dataset: mnist
+  data_root: /data/donn/datasets/mnist
+  batch_size: 32
+  max_train_batches: 0
+  max_test_batches: 0
+  # Config dimensions are H x W. This is the 32 x 24 (W x H) optical input.
+  h_in: 24
+  w_in: 32
+  h_out: 128
+  w_out: 128
+  input_mode: gray
+  enable_aug: false
+  mnist_target_mode: class
+
+model_cfg:
+  name: measured_tm_scatter
+  num_layers: 1
+  seed: 42
+  activation: abs
+  normalize_input: true
+  input_amplitude_normalization: minmax
+  sqrt_amplitude: true
+  phase_init: uniform
+
+  # Expected shape: [128*128 output modes, 24*32 input modes].
+  tmatrix_path: /path/to/H0_32x24_to_128x128.npy
+  tmatrix_shape: "16384,768"
+  tmatrix_dtype: complex64
+  tmatrix_layout: out_in
+  tmatrix_normalization: none
+  tmatrix_input_h: 24
+  tmatrix_input_w: 32
+
+classification:
+  num_classes: 10
+  grid_rows: 2
+  grid_cols: 5
+  roi_h: 16
+  roi_w: 16
+  detector_margin: 12
+  log_energy: true
+  # First establish the CE-only baseline; try 0.05 in the efficiency ablation.
+  efficiency_weight: 0.0
+
+optim:
+  lr: 0.001
+  epochs: 100
+  save_every: 10
+
+runtime:
+  device: cuda:0
+  amp: false
+  amp_dtype: bf16
+
+logging:
+  log_dir: logs
+  ckpt_dir: logs
+  comment: mnist-32x24-measured-tm-classification
+
+loss:
+  name: cross_entropy
+  label_smoothing: 0.0
+
+clearml:
+  enabled: false
+  project_name: donn
+  tags:
+    - donn
+    - mnist
+    - classification
+    - measured-tm
+    - 32x24
+
+output:
+  run_name: mnist-32x24-measured-tm-classification

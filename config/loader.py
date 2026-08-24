@@ -32,7 +32,7 @@ DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "configs" / "default
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="DONN unified training entrypoint")
     parser.add_argument("--config", "--configs", dest="config", type=str, default=None, help="Path to YAML config")
-    parser.add_argument("--pipeline", type=str, default=None, choices=["base", "distill", "stn"])
+    parser.add_argument("--pipeline", type=str, default=None, choices=["base", "classification", "distill", "stn"])
 
     parser.add_argument("--model", type=str, default=None)
     parser.add_argument("--dataset", type=str, default=None)
@@ -44,6 +44,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max_test_batches", type=int, default=None)
     parser.add_argument("--vis_samples", type=int, default=None)
     parser.add_argument("--label_filter", type=str, default=None)
+    parser.add_argument("--mnist_target_mode", type=str, default=None, choices=["coord", "class"])
     parser.add_argument("--lr", type=float, default=None)
     parser.add_argument("--log_dir", type=str, default=None)
     parser.add_argument("--comment", type=str, default=None)
@@ -76,6 +77,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mix_loss_a", type=str, default=None)
     parser.add_argument("--mix_loss_b", type=str, default=None)
     parser.add_argument("--mix_alpha", type=float, default=None)
+
+    parser.add_argument("--num_classes", type=int, default=None)
+    parser.add_argument("--class_grid_rows", type=int, default=None)
+    parser.add_argument("--class_grid_cols", type=int, default=None)
+    parser.add_argument("--class_roi_h", type=int, default=None)
+    parser.add_argument("--class_roi_w", type=int, default=None)
+    parser.add_argument("--detector_margin", type=int, default=None)
+    parser.add_argument("--classification_log_energy", action="store_true", default=None)
+    parser.add_argument("--efficiency_weight", type=float, default=None)
 
     parser.add_argument("--enable_aug", action="store_true", default=None)
     parser.add_argument("--disable_aug", action="store_true", default=None)
@@ -193,7 +203,7 @@ def _apply_yaml_payload(cfg: ExperimentConfig, payload: dict[str, Any]) -> None:
     if not payload:
         return
     # Support both nested schema and old flat schema.
-    if any(k in payload for k in ("data", "model_cfg", "optim", "runtime", "logging", "loss", "distill", "output", "clearml")):
+    if any(k in payload for k in ("data", "model_cfg", "optim", "runtime", "logging", "loss", "classification", "distill", "output", "clearml")):
         update_config_from_dict(cfg, payload)
     else:
         _apply_flat_overrides(cfg, payload)
@@ -241,6 +251,7 @@ def _apply_flat_overrides(cfg: ExperimentConfig, flat: dict[str, Any]) -> list[s
 
     direct_map = {
         "label_filter": ("data", "label_filter"),
+        "mnist_target_mode": ("data", "mnist_target_mode"),
         "multiple_objects": ("data", "multiple_objects"),
         "batch_size": ("data", "batch_size"),
         "max_train_batches": ("data", "max_train_batches"),
@@ -343,6 +354,14 @@ def _apply_flat_overrides(cfg: ExperimentConfig, flat: dict[str, Any]) -> list[s
         "mix_loss_a": ("loss", "mix_loss_a"),
         "mix_loss_b": ("loss", "mix_loss_b"),
         "mix_alpha": ("loss", "mix_alpha"),
+        "num_classes": ("classification", "num_classes"),
+        "class_grid_rows": ("classification", "grid_rows"),
+        "class_grid_cols": ("classification", "grid_cols"),
+        "class_roi_h": ("classification", "roi_h"),
+        "class_roi_w": ("classification", "roi_w"),
+        "detector_margin": ("classification", "detector_margin"),
+        "classification_log_energy": ("classification", "log_energy"),
+        "efficiency_weight": ("classification", "efficiency_weight"),
         "teacher_model": ("distill", "teacher_model"),
         "teacher_ckpt": ("distill", "teacher_ckpt"),
         "task_w": ("distill", "task_w"),

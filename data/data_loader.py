@@ -55,6 +55,7 @@ VEHICLE_CHANNEL_P_LOW = 2.0
 VEHICLE_CHANNEL_P_HIGH = 98.0
 VEHICLE_TARGET_MODE = "center"
 VEHICLE_TARGET_COLUMN = "box_mask"
+MNIST_TARGET_MODE = "coord"
 
 _TRACKING_VEHICLE_TOTAL_FRAMES_CACHE: dict[tuple[str, str], int] = {}
 
@@ -63,7 +64,7 @@ def update_config(h_in, w_in, h_out, w_out, aug_params=None):
     global AUG_ENABLE, AUG_HFLIP_P, AUG_COLOR_P, AUG_BLUR_P, AUG_NOISE_P
     global ZOOM_CROP_MODE, ZOOM_CROP_FACTOR
     global VEHICLE_CHANNEL_MODE, VEHICLE_CHANNEL, VEHICLE_CHANNEL_INVERT, VEHICLE_CHANNEL_P_LOW, VEHICLE_CHANNEL_P_HIGH
-    global VEHICLE_TARGET_MODE, VEHICLE_TARGET_COLUMN
+    global VEHICLE_TARGET_MODE, VEHICLE_TARGET_COLUMN, MNIST_TARGET_MODE
     H_in, W_in = h_in, w_in
     H_out, W_out = h_out, w_out
     if aug_params:
@@ -83,6 +84,7 @@ def update_config(h_in, w_in, h_out, w_out, aug_params=None):
         VEHICLE_CHANNEL_P_HIGH = float(aug_params.get('vehicle_channel_p_high', VEHICLE_CHANNEL_P_HIGH))
         VEHICLE_TARGET_MODE = str(aug_params.get('vehicle_target_mode', VEHICLE_TARGET_MODE)).lower()
         VEHICLE_TARGET_COLUMN = str(aug_params.get('vehicle_target_column', VEHICLE_TARGET_COLUMN))
+        MNIST_TARGET_MODE = str(aug_params.get('mnist_target_mode', MNIST_TARGET_MODE)).lower()
 
 def _ceil_div(n: int, d: int) -> int:
     n = int(n)
@@ -158,12 +160,7 @@ def estimate_total_batches(
 
     if dataset_name == "mnist":
         import torchvision
-        from torchvision import transforms
-
-        tfm = transforms.Compose([
-            transforms.Resize((int(H_in), int(W_in))),
-            transforms.ToTensor(),
-        ])
+        tfm = _mnist_letterbox_transform((int(H_in), int(W_in)))
         train_flag = (split.lower() == "train")
         ds = torchvision.datasets.MNIST(root=data_root, train=train_flag, transform=tfm, download=True)
         n = int(len(ds))
@@ -346,6 +343,26 @@ def mnist_label_to_coord(label: int, h: int, w: int) -> tuple[int, int]:
     cc = int(np.clip(np.round(x), 0, w - 1))
     return rr, cc
 
+
+def _mnist_letterbox_transform(image_hw: tuple[int, int]):
+    """Resize MNIST without distortion, then zero-pad to the optical input grid."""
+    from torchvision import transforms
+
+    h_in, w_in = int(image_hw[0]), int(image_hw[1])
+    side = min(h_in, w_in)
+    pad_h, pad_w = h_in - side, w_in - side
+    left = pad_w // 2
+    right = pad_w - left
+    top = pad_h // 2
+    bottom = pad_h - top
+    return transforms.Compose(
+        [
+            transforms.Resize((side, side)),
+            transforms.Pad((left, top, right, bottom), fill=0),
+            transforms.ToTensor(),
+        ]
+    )
+
 def _batch_iter_inria(root: str, split: str, batch_size: int, multiple_objects: bool = True):
     if InriaPersonDataset is None: raise RuntimeError("InriaPersonDataset not available")
     ds = InriaPersonDataset(root, split=split, include_negatives=False)
@@ -394,26 +411,30 @@ def _batch_iter_pennfudan(root: str, split: str, batch_size: int, multiple_objec
 
 def _batch_iter_mnist(root: str, split: str, batch_size: int, image_hw: tuple[int, int], out_hw: tuple[int, int]):
     import torchvision
-    from torchvision import transforms
     h_in, w_in = int(image_hw[0]), int(image_hw[1])
     h_out, w_out = int(out_hw[0]), int(out_hw[1])
-    tfm = transforms.Compose([transforms.Resize((h_in, w_in)), transforms.ToTensor()])
+    tfm = _mnist_letterbox_transform((h_in, w_in))
     train_flag = (split.lower() == "train")
     ds = torchvision.datasets.MNIST(root=root, train=train_flag, transform=tfm, download=True)
-    imgs, coords = [], []
+    imgs, targets = [], []
     for img_tensor, label in ds:
         if str(INPUT_MODE or "rgb").lower() in {"auto", "default", "rgb", "bgr", "none", "off"}:
             img_in = img_tensor.repeat(3, 1, 1) if img_tensor.ndim == 3 and img_tensor.shape[0] == 1 else img_tensor
         else:
             img_in = img_tensor[:1] if img_tensor.ndim == 3 else img_tensor.unsqueeze(0)
-        rr, cc = mnist_label_to_coord(int(label), h_out, w_out)
         imgs.append(img_in.unsqueeze(0))
-        coords.append(torch.tensor([rr, cc]).view(1, 2))
+        if MNIST_TARGET_MODE == "class":
+            targets.append(torch.tensor([int(label)], dtype=torch.long))
+        elif MNIST_TARGET_MODE == "coord":
+            rr, cc = mnist_label_to_coord(int(label), h_out, w_out)
+            targets.append(torch.tensor([[rr, cc]], dtype=torch.long))
+        else:
+            raise ValueError("mnist_target_mode must be one of {'coord', 'class'}")
         if len(imgs) == batch_size:
-            yield torch.cat(imgs, dim=0), torch.cat(coords, dim=0).long()
-            imgs, coords = [], []
+            yield torch.cat(imgs, dim=0), torch.cat(targets, dim=0).long()
+            imgs, targets = [], []
     if imgs:
-        yield torch.cat(imgs, dim=0), torch.cat(coords, dim=0).long()
+        yield torch.cat(imgs, dim=0), torch.cat(targets, dim=0).long()
 
 def _batch_iter_syn(root: str, split: str, batch_size: int, multiple_objects: bool = True):
     if LocalizationDataset is None: raise RuntimeError("LocalizationDataset not available")
@@ -677,8 +698,7 @@ def get_dataset(dataset_name, data_root, split, label_filter="person"):
         return VehicleCenterDataset(data_root, split=split)
     elif dataset_name == "mnist":
         import torchvision
-        from torchvision import transforms
         is_train = (split == "Train")
-        tfm = transforms.Compose([transforms.Resize((H_in, W_in)), transforms.ToTensor()])
+        tfm = _mnist_letterbox_transform((H_in, W_in))
         return torchvision.datasets.MNIST(root=data_root, train=is_train, transform=tfm, download=True)
     return None

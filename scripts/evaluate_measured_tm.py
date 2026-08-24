@@ -73,14 +73,37 @@ def evaluate(cfg: ExperimentConfig, checkpoint: Path | None, device: torch.devic
     register_builtin_pipelines()
 
     pipeline = create_registered_pipeline(cfg.pipeline)
-    model = pipeline.build_model(cfg, device, DistContext(False, 0, 1))
+    pipeline.validate_config(cfg)
+    dist_ctx = DistContext(False, 0, 1)
+    model = pipeline.build_model(cfg, device, dist_ctx)
     if checkpoint is not None:
         CheckpointIO.load(path=str(checkpoint), model=model, map_location=device, strict=False)
+    pipeline.setup(cfg, model, device, dist_ctx)
     model.eval()
 
     datamodule = create_dataset(cfg.dataset, cfg)
     autocast_enabled = device.type == "cuda" and str(cfg.model_cfg.tmatrix_compute_dtype) in ("bf16", "fp16")
     autocast_dtype = torch.bfloat16 if str(cfg.model_cfg.tmatrix_compute_dtype) == "bf16" else torch.float16
+
+    if str(cfg.pipeline).lower() == "classification":
+        metric_sums: dict[str, float] = {}
+        sample_count = 0
+        with torch.no_grad():
+            for batch_idx, (x_batch, target_batch) in enumerate(datamodule.val_iter(), start=1):
+                x_batch = x_batch.to(device, non_blocking=True)
+                target_batch = target_batch.to(device, non_blocking=True)
+                batch_size = int(x_batch.shape[0])
+                with autocast("cuda", enabled=autocast_enabled, dtype=autocast_dtype if autocast_enabled else None):
+                    out = pipeline.validation_step((x_batch, target_batch), model, cfg)
+                values = {"configured_loss": float(out.loss.detach().cpu())}
+                values.update({k: float(v) for k, v in out.metrics.items() if k not in {"val_loss", "task_loss"}})
+                for key, value in values.items():
+                    metric_sums[key] = metric_sums.get(key, 0.0) + value * batch_size
+                sample_count += batch_size
+                if cfg.data.max_test_batches > 0 and batch_idx >= int(cfg.data.max_test_batches):
+                    break
+        n = max(sample_count, 1)
+        return {"n": sample_count, **{key: value / n for key, value in metric_sums.items()}}
 
     sums = {
         "n": 0.0,

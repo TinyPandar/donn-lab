@@ -69,6 +69,29 @@ python scripts/train_measured_tm.py \
   --num_layers 5
 ```
 
+## MNIST Classification With A 32x24 Input
+
+The MNIST classification pipeline keeps the optical output as a `128x128`
+intensity map and reads ten fixed detector regions arranged in a `2x5` grid.
+MNIST is resized to `24x24` without distortion and zero-padded on the left and
+right to produce the `24x32` (`H x W`) optical input. The legacy MNIST
+class-to-single-pixel coordinate mode remains available through
+`data.mnist_target_mode: coord`.
+
+```bash
+python train.py \
+  --config configs/mnist_32x24_measured_tm_classification_template.yaml \
+  --tmatrix_path /data/donn/tm/run_001/H0.npy
+```
+
+The template expects a complex matrix with shape `[16384, 768]`, corresponding
+to `128x128` camera pixels and `32x24` input modes. Run the software-only
+classification check with:
+
+```bash
+python tests/smoke_mnist_classification.py
+```
+
 ## Evaluate With H0 Or H1
 
 ```bash

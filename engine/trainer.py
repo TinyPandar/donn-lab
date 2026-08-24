@@ -114,13 +114,13 @@ class TrainerEngine:
             return
         self.clearml_logger.report_scalar(title=title, series=series, value=value, iteration=iteration)
 
-    def _broadcast_batch_if_needed(self, x_batch: torch.Tensor, coords_batch: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def _broadcast_batch_if_needed(self, x_batch: torch.Tensor, target_batch: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         state = self.dist_state
         assert state is not None
         if state.is_dist:
             dist.broadcast(x_batch, src=0)
-            dist.broadcast(coords_batch, src=0)
-        return x_batch, coords_batch
+            dist.broadcast(target_batch, src=0)
+        return x_batch, target_batch
 
     def _maybe_resume(self) -> None:
         assert self.model is not None and self.optimizer is not None and self.dist_state is not None
@@ -212,14 +212,14 @@ class TrainerEngine:
             else:
                 pbar = batch_iter
 
-            for b_idx, (x_batch, coords_batch) in enumerate(pbar, start=1):
+            for b_idx, (x_batch, target_batch) in enumerate(pbar, start=1):
                 x_batch = x_batch.to(state.device, non_blocking=True)
-                coords_batch = coords_batch.to(state.device, non_blocking=True)
-                x_batch, coords_batch = self._broadcast_batch_if_needed(x_batch, coords_batch)
+                target_batch = target_batch.to(state.device, non_blocking=True)
+                x_batch, target_batch = self._broadcast_batch_if_needed(x_batch, target_batch)
 
                 self.optimizer.zero_grad(set_to_none=True)
                 with autocast("cuda", enabled=ac_enabled, dtype=ac_dtype if ac_enabled else None):
-                    out = self.pipeline.training_step((x_batch, coords_batch), self.model, self.cfg)
+                    out = self.pipeline.training_step((x_batch, target_batch), self.model, self.cfg)
                 loss = out.loss
                 scaler.scale(loss).backward()
                 scaler.step(self.optimizer)
@@ -298,13 +298,13 @@ class TrainerEngine:
                 else:
                     test_pbar = test_iter
 
-                for tb_idx, (x_batch, coords_batch) in enumerate(test_pbar, start=1):
+                for tb_idx, (x_batch, target_batch) in enumerate(test_pbar, start=1):
                     x_batch = x_batch.to(state.device, non_blocking=True)
-                    coords_batch = coords_batch.to(state.device, non_blocking=True)
-                    x_batch, coords_batch = self._broadcast_batch_if_needed(x_batch, coords_batch)
+                    target_batch = target_batch.to(state.device, non_blocking=True)
+                    x_batch, target_batch = self._broadcast_batch_if_needed(x_batch, target_batch)
 
                     with autocast("cuda", enabled=ac_enabled, dtype=ac_dtype if ac_enabled else None):
-                        vout = self.pipeline.validation_step((x_batch, coords_batch), self.model, self.cfg)
+                        vout = self.pipeline.validation_step((x_batch, target_batch), self.model, self.cfg)
                     vloss = float(vout.loss.detach().cpu())
                     test_loss_sum += vloss
                     test_batch_count += 1

@@ -6,6 +6,7 @@ channels:
 dependencies:
   - python=3.12
   - pytorch=2.5.1
+  - torchvision=0.20.1
   - pytorch-cuda=12.4
   - numpy
   - pandas
@@ -21,4 +22,3 @@ dependencies:
       - matplotlib
       - tensorboard
       - clearml
-
