@@ -54,6 +54,7 @@ class LegacyDataModule:
                 "vehicle_channel_p_high": float(cfg.data.vehicle_channel_p_high),
                 "vehicle_target_mode": str(cfg.data.vehicle_target_mode),
                 "vehicle_target_column": str(cfg.data.vehicle_target_column),
+                "mnist_target_mode": str(cfg.data.mnist_target_mode),
             },
         )
 
